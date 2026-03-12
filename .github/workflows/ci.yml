@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  launcher-tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: launcher
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: launcher/package.json
+
+      - name: Install launcher dependencies
+        run: npm install
+
+      - name: Run launcher tests
+        run: npm test
+
+  package-nextcloud-app:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build App Store archive
+        run: ./scripts/package-nextcloud-app.sh
+
+      - name: Upload packaged archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-app-package
+          path: dist/*.tar.gz

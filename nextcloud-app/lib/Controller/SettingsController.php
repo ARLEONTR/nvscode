@@ -9,6 +9,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IRequest;
+use InvalidArgumentException;
 
 class SettingsController extends Controller {
     public function __construct(
@@ -21,7 +22,6 @@ class SettingsController extends Controller {
 
     /**
      * @AdminRequired
-     * @NoCSRFRequired
      */
     public function page(): TemplateResponse {
         return new TemplateResponse($this->appName, 'admin-settings', [
@@ -34,13 +34,20 @@ class SettingsController extends Controller {
      * @AdminRequired
      */
     public function save(): DataResponse {
-        $this->appConfig->saveSettings([
-            'launcherUrl' => $this->request->getParam('launcherUrl'),
-            'sharedSecret' => $this->request->getParam('sharedSecret'),
-            'sessionTtlSeconds' => $this->request->getParam('sessionTtlSeconds'),
-            'idleTimeoutSeconds' => $this->request->getParam('idleTimeoutSeconds'),
-            'codeServerImage' => $this->request->getParam('codeServerImage'),
-        ]);
+        try {
+            $this->appConfig->saveSettings([
+                'launcherUrl' => $this->request->getParam('launcherUrl'),
+                'sharedSecret' => $this->request->getParam('sharedSecret'),
+                'sessionTtlSeconds' => $this->request->getParam('sessionTtlSeconds'),
+                'idleTimeoutSeconds' => $this->request->getParam('idleTimeoutSeconds'),
+                'codeServerImage' => $this->request->getParam('codeServerImage'),
+            ]);
+        } catch (InvalidArgumentException $exception) {
+            return new DataResponse([
+                'status' => 'error',
+                'message' => $exception->getMessage(),
+            ], 400);
+        }
 
         return new DataResponse([
             'status' => 'ok',

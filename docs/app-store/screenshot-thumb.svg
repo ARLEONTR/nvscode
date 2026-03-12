@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="52" y1="40" x2="740" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4F0E8"/>
+      <stop offset="1" stop-color="#D9E8F5"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="500" rx="28" fill="url(#bg)"/>
+  <rect x="42" y="34" width="716" height="432" rx="20" fill="#FCFBF7" stroke="#C6D6E6" stroke-width="3"/>
+  <rect x="42" y="34" width="716" height="48" rx="20" fill="#F2F6FA"/>
+  <rect x="58" y="102" width="114" height="324" rx="14" fill="#EEF4F8"/>
+  <rect x="186" y="102" width="548" height="324" rx="16" fill="#101A28"/>
+  <rect x="186" y="102" width="548" height="38" rx="16" fill="#223149"/>
+  <rect x="208" y="162" width="126" height="160" fill="#0B1320"/>
+  <rect x="348" y="162" width="362" height="160" fill="#0B1320"/>
+  <rect x="372" y="188" width="132" height="12" rx="6" fill="#8FB6FF"/>
+  <rect x="372" y="218" width="254" height="8" rx="4" fill="#7B95B5"/>
+  <rect x="372" y="242" width="220" height="8" rx="4" fill="#7B95B5"/>
+  <text x="58" y="455" fill="#18314C" font-family="Verdana, sans-serif" font-size="28" font-weight="700">nVSCode</text>
+</svg>

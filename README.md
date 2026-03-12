@@ -74,3 +74,16 @@ Inside the launcher package:
 
 - Install dependencies with `npm install`.
 - Run the launcher test suite with `npm test`.
+
+## App Store release
+
+The Nextcloud Community App Store only distributes the `nextcloud-app/` folder. The launcher service, code-server image, and reverse proxy remain external deployment steps documented in [deployment.md](deployment.md).
+
+To prepare an App Store archive from this repository:
+
+1. Update `nextcloud-app/appinfo/info.xml` and `nextcloud-app/CHANGELOG.md` for the release version.
+2. Run `./scripts/package-nextcloud-app.sh`.
+3. Upload the generated `dist/nvscode-<version>.tar.gz` archive to a GitHub release or another HTTPS host.
+4. Sign the archive with your Nextcloud App Store private key and upload the release in the App Store developer portal.
+
+The detailed release flow, including certificate generation and upload steps, is in [app-store-release.md](app-store-release.md).

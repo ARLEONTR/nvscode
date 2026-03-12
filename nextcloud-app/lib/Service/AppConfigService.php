@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\NVSCode\Service;
 
+use InvalidArgumentException;
 use OCP\IConfig;
 
 class AppConfigService {
@@ -59,7 +60,7 @@ class AppConfigService {
         $this->config->setAppValue(self::APP_ID, self::KEY_SHARED_SECRET, trim((string) ($values['sharedSecret'] ?? $this->getSharedSecret())));
         $this->config->setAppValue(self::APP_ID, self::KEY_SESSION_TTL_SECONDS, (string) $this->normalizeIntValue($values['sessionTtlSeconds'] ?? $this->getSessionTtlSeconds(), 300, 86400));
         $this->config->setAppValue(self::APP_ID, self::KEY_IDLE_TIMEOUT_SECONDS, (string) $this->normalizeIntValue($values['idleTimeoutSeconds'] ?? $this->getIdleTimeoutSeconds(), 300, 86400));
-        $this->config->setAppValue(self::APP_ID, self::KEY_CODE_SERVER_IMAGE, trim((string) ($values['codeServerImage'] ?? $this->getCodeServerImage())));
+        $this->config->setAppValue(self::APP_ID, self::KEY_CODE_SERVER_IMAGE, $this->sanitizeCodeServerImage((string) ($values['codeServerImage'] ?? $this->getCodeServerImage())));
     }
 
     private function getString(string $key, string $default): string {
@@ -107,6 +108,24 @@ class AppConfigService {
         $value = rtrim(trim($value), '/');
         if ($value === '') {
             return 'http://nvscode-launcher:3000';
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_URL) === false) {
+            throw new InvalidArgumentException('Launcher URL must be a valid absolute URL.');
+        }
+
+        $scheme = (string) parse_url($value, PHP_URL_SCHEME);
+        if ($scheme !== 'http' && $scheme !== 'https') {
+            throw new InvalidArgumentException('Launcher URL must use http or https.');
+        }
+
+        return $value;
+    }
+
+    private function sanitizeCodeServerImage(string $value): string {
+        $value = trim($value);
+        if ($value === '') {
+            return 'nvscode-code-server:latest';
         }
 
         return $value;

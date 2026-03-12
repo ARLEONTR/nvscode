@@ -1,4 +1,6 @@
+.DS_Store
 .env
+dist/
 docker-data/
 launcher/node_modules/
 launcher/package-lock.json

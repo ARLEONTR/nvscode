@@ -30,7 +30,6 @@ class EditorController extends Controller {
 
     /**
      * @NoAdminRequired
-        * @NoCSRFRequired
      */
     public function open(): TemplateResponse {
         $user = $this->userSession->getUser();

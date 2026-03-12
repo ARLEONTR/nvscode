@@ -1,0 +1,32 @@
+name: Release Nextcloud App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build App Store archive
+        run: ./scripts/package-nextcloud-app.sh
+
+      - name: Generate SHA256 checksum
+        run: sha256sum dist/*.tar.gz > dist/SHA256SUMS.txt
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          generate_release_notes: true

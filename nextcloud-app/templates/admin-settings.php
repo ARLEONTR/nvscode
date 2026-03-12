@@ -83,12 +83,22 @@ $standalone = isset($_['standalone']) && $_['standalone'] === true;
         });
 
         if (!response.ok) {
-          throw new Error('Unable to save settings');
+          let message = 'Unable to save settings';
+
+          try {
+            const data = await response.json();
+            if (data && typeof data.message === 'string' && data.message !== '') {
+              message = data.message;
+            }
+          } catch (_error) {
+          }
+
+          throw new Error(message);
         }
 
         status.textContent = 'Saved';
-      } catch (_error) {
-        status.textContent = 'Save failed';
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : 'Save failed';
       }
     });
   })();
