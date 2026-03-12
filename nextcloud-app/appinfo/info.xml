@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<info>
+  <id>nvscode</id>
+  <name>nVSCode</name>
+  <summary>Open Nextcloud files in managed nVSCode workspaces</summary>
+  <description>nVSCode integrates Nextcloud Files with per-user code-server workspaces behind a same-origin proxy.</description>
+  <version>0.1.0</version>
+  <licence>agpl</licence>
+  <namespace>NVSCode</namespace>
+  <category>tools</category>
+  <settings>
+    <admin>OCA\NVSCode\Settings\Admin</admin>
+  </settings>
+  <dependencies>
+    <nextcloud min-version="29" max-version="30"/>
+  </dependencies>
+</info>

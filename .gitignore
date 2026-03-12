@@ -1,0 +1,4 @@
+.env
+docker-data/
+launcher/node_modules/
+launcher/package-lock.json

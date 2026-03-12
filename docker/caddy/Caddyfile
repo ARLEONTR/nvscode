@@ -1,0 +1,13 @@
+{
+  auto_https off
+}
+
+:8080 {
+  encode gzip zstd
+
+  handle_path /apps/nvscode/proxy/* {
+    reverse_proxy nvscode-launcher:3000
+  }
+
+  reverse_proxy nextcloud:80
+}

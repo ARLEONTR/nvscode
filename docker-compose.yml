@@ -1,0 +1,84 @@
+services:
+  code-server-base:
+    image: ${CODE_SERVER_IMAGE:-nvscode-code-server:latest}
+    build:
+      context: ./docker/code-server-base
+      args:
+        CODE_SERVER_VERSION: 4.96.4
+        TYPST_VERSION: 0.14.2
+    command: ["sleep", "infinity"]
+
+  caddy:
+    image: caddy:2.8
+    depends_on:
+      - nextcloud
+      - nvscode-launcher
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  db:
+    image: mariadb:11.4
+    command:
+      - --transaction-isolation=READ-COMMITTED
+      - --binlog-format=ROW
+      - --innodb-read-only-compressed=OFF
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./docker-data/db:/var/lib/mysql
+
+  nextcloud:
+    image: nextcloud:30-apache
+    depends_on:
+      - db
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+      NEXTCLOUD_DATA_DIR: /var/www/html/data
+      NVSCODE_LAUNCHER_URL: http://nvscode-launcher:3000
+      NVSCODE_SHARED_SECRET: ${NVSCODE_SHARED_SECRET}
+      NVSCODE_SESSION_TTL_SECONDS: ${NVSCODE_SESSION_TTL_SECONDS:-3600}
+      NVSCODE_IDLE_TIMEOUT_SECONDS: ${NVSCODE_IDLE_TIMEOUT_SECONDS:-3600}
+      CODE_SERVER_IMAGE: ${CODE_SERVER_IMAGE:-nvscode-code-server:latest}
+    volumes:
+      - nextcloud_html:/var/www/html
+      - ./docker-data/nextcloud-data:/var/www/html/data
+      - ./docker-data/custom_apps:/var/www/html/custom_apps
+      - ./nextcloud-app:/var/www/html/custom_apps/nvscode
+
+  nvscode-launcher:
+    image: nvscode-launcher:latest
+    build:
+      context: ./launcher
+    depends_on:
+      - nextcloud
+      - code-server-base
+    environment:
+      PORT: 3000
+      INTERNAL_SHARED_SECRET: ${NVSCODE_SHARED_SECRET}
+      SESSION_SIGNING_SECRET: ${NVSCODE_SESSION_SIGNING_SECRET}
+      NEXTCLOUD_DATA_HOST_PATH: ${NEXTCLOUD_DATA_HOST_PATH}
+      LAUNCHER_STATE_HOST_PATH: ${LAUNCHER_STATE_HOST_PATH}
+      DOCKER_NETWORK_NAME: ${COMPOSE_PROJECT_NAME}_default
+      CODE_SERVER_IMAGE: ${CODE_SERVER_IMAGE:-nvscode-code-server:latest}
+      CODE_SERVER_CONTAINER_PREFIX: ${CODE_SERVER_CONTAINER_PREFIX}
+      CODE_SERVER_DEFAULT_EXTENSIONS: ${CODE_SERVER_DEFAULT_EXTENSIONS:-myriad-dreamin.tinymist,mathematic.vscode-pdf,openai.chatgpt}
+      DEFAULT_SESSION_TTL_SECONDS: ${NVSCODE_SESSION_TTL_SECONDS:-3600}
+      DEFAULT_IDLE_TIMEOUT_SECONDS: ${NVSCODE_IDLE_TIMEOUT_SECONDS:-3600}
+      CLEANUP_INTERVAL_SECONDS: ${NVSCODE_LAUNCHER_CLEANUP_INTERVAL_SECONDS:-300}
+      FILE_SCAN_INTERVAL_SECONDS: ${NVSCODE_FILE_SCAN_INTERVAL_SECONDS:-15}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  nextcloud_html:
+

@@ -1,0 +1,18 @@
+{
+  "name": "nvscode-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Launcher and proxy for per-user code-server sessions behind Nextcloud.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dockerode": "^4.0.5",
+    "express": "^4.21.2",
+    "http-proxy": "^1.18.1",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
+
