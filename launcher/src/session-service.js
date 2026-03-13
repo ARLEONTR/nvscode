@@ -13,8 +13,10 @@ const CODE_SERVER_ENTRYPOINT = [
   '/workspace',
 ]
 
-const CODE_SERVER_CONFIG_PATH = '/home/coder/.config'
-const CODE_SERVER_DATA_PATH = '/home/coder/.local/share/code-server'
+const CODE_SERVER_HOME_PATH = '/tmp'
+const CODE_SERVER_CONFIG_PATH = '/nvscode/config'
+const CODE_SERVER_DATA_PATH = '/nvscode/data'
+const CODE_SERVER_STATE_LAYOUT_VERSION = '2'
 
 class SessionService {
   constructor({ docker, config, now = () => Date.now(), waitForCodeServerReady = defaultWaitForCodeServerReady }) {
@@ -223,7 +225,12 @@ class SessionService {
 
     try {
       const details = await container.inspect()
-      if (normalizeContainerUser(details.Config && details.Config.User) === runtimeOwner) {
+      if (isCodeServerContainerCompatible(details, {
+        runtimeOwner,
+        workspacePath,
+        configPath,
+        dataPath,
+      })) {
         await ensureWritableStateDirectories(this.docker, image, {
           configPath,
           dataPath,
@@ -258,13 +265,16 @@ class SessionService {
       Entrypoint: ['sh', '-lc'],
       Cmd: [buildCodeServerStartupCommand()],
       Env: [
-        'HOME=/home/coder',
+        `HOME=${CODE_SERVER_HOME_PATH}`,
+        `XDG_CONFIG_HOME=${CODE_SERVER_CONFIG_PATH}`,
+        `XDG_DATA_HOME=${CODE_SERVER_DATA_PATH}`,
         `CODE_SERVER_DEFAULT_EXTENSIONS=${this.config.codeServerDefaultExtensions.join(',')}`,
       ],
       Labels: {
         'com.nvscode.role': 'code-server',
         'com.nvscode.user': userId,
         'com.nvscode.run-as': runtimeOwner,
+        'com.nvscode.state-layout': CODE_SERVER_STATE_LAYOUT_VERSION,
       },
       HostConfig: {
         AutoRemove: false,
@@ -360,6 +370,27 @@ function normalizeContainerUser(value) {
   return /^\d+:\d+$/.test(normalized) ? normalized : ''
 }
 
+function isCodeServerContainerCompatible(details, { runtimeOwner, workspacePath, configPath, dataPath }) {
+  if (normalizeContainerUser(details && details.Config && details.Config.User) !== runtimeOwner) {
+    return false
+  }
+
+  const labels = (details && details.Config && details.Config.Labels) || {}
+  if (labels['com.nvscode.state-layout'] !== CODE_SERVER_STATE_LAYOUT_VERSION) {
+    return false
+  }
+
+  const env = new Set((details && details.Config && details.Config.Env) || [])
+  const binds = new Set((details && details.HostConfig && details.HostConfig.Binds) || [])
+
+  return env.has(`HOME=${CODE_SERVER_HOME_PATH}`)
+    && env.has(`XDG_CONFIG_HOME=${CODE_SERVER_CONFIG_PATH}`)
+    && env.has(`XDG_DATA_HOME=${CODE_SERVER_DATA_PATH}`)
+    && binds.has(`${workspacePath}:/workspace`)
+    && binds.has(`${configPath}:${CODE_SERVER_CONFIG_PATH}`)
+    && binds.has(`${dataPath}:${CODE_SERVER_DATA_PATH}`)
+}
+
 async function stopAndRemoveContainer(container, details) {
   if (details && details.State && details.State.Running) {
     await container.stop({ t: 15 })
@@ -416,7 +447,7 @@ function buildCodeServerSettingsCommand() {
     'settings["workbench.editorAssociations"] = editorAssociations',
     'fs.writeFileSync(filePath, `${JSON.stringify(settings, null, 4)}\\n`)',
     'NVSCODE_CODE_SERVER_SETTINGS',
-    'settings_file="$HOME/.local/share/code-server/User/settings.json"',
+    'settings_file="$XDG_DATA_HOME/code-server/User/settings.json"',
     '/usr/lib/code-server/lib/node /tmp/nvscode-code-server-settings.js "$settings_file"',
     'rm -f /tmp/nvscode-code-server-settings.js',
   ]
@@ -512,7 +543,7 @@ function buildTinymistPatchCommand() {
     ')',
     'fs.writeFileSync(filePath, source)',
     'NVSCODE_TINYMIST_PATCH',
-    'find "$HOME/.local/share/code-server/extensions" -maxdepth 1 -type d -name "myriad-dreamin.tinymist-*" | while IFS= read -r extension_dir; do',
+    'find "$XDG_DATA_HOME/code-server/extensions" -maxdepth 1 -type d -name "myriad-dreamin.tinymist-*" | while IFS= read -r extension_dir; do',
     '  extension_file="$extension_dir/out/extension.js"',
     '  if [ -f "$extension_file" ]; then',
     '    /usr/lib/code-server/lib/node /tmp/nvscode-tinymist-patch.js "$extension_file" || true',
@@ -663,6 +694,7 @@ module.exports = {
   SessionService,
   ensureImage,
   ensureWritableStateDirectories,
+  isCodeServerContainerCompatible,
   isSafeUserId,
   normalizeContainerUser,
   normalizeWorkspacePath,

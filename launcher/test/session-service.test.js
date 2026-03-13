@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken')
 const {
   buildNextcloudScanPath,
   buildCodeServerStartupCommand,
+  isCodeServerContainerCompatible,
   parseUidGidOutput,
   resolveWorkspaceOwner,
   SessionService,
@@ -45,10 +46,37 @@ test('buildCodeServerStartupCommand installs default extensions before startup',
   assert.match(command, /CODE_SERVER_DEFAULT_EXTENSIONS/)
   assert.match(command, /code-server --install-extension/)
   assert.match(command, /nvscode-code-server-settings/)
+  assert.match(command, /XDG_DATA_HOME\/code-server\/User\/settings\.json/)
   assert.match(command, /pdf\.view/)
   assert.match(command, /nvscode-tinymist-patch/)
   assert.match(command, /resolvePreviewWebSocketUrl/)
   assert.match(command, /exec code-server/)
+})
+
+test('isCodeServerContainerCompatible validates the expected state layout', () => {
+  assert.equal(isCodeServerContainerCompatible({
+    Config: {
+      User: '2001:3001',
+      Labels: { 'com.nvscode.state-layout': '2' },
+      Env: [
+        'HOME=/tmp',
+        'XDG_CONFIG_HOME=/nvscode/config',
+        'XDG_DATA_HOME=/nvscode/data',
+      ],
+    },
+    HostConfig: {
+      Binds: [
+        '/srv/nextcloud-data/alice/files:/workspace',
+        '/srv/launcher-state/alice/config:/nvscode/config',
+        '/srv/launcher-state/alice/data:/nvscode/data',
+      ],
+    },
+  }, {
+    runtimeOwner: '2001:3001',
+    workspacePath: '/srv/nextcloud-data/alice/files',
+    configPath: '/srv/launcher-state/alice/config',
+    dataPath: '/srv/launcher-state/alice/data',
+  }), true)
 })
 
 test('resolveWorkspaceOwner parses uid and gid from a mounted workspace probe', async () => {
@@ -158,12 +186,15 @@ test('createSession provisions a container with workspace and state mounts', asy
   assert.equal(createdSpecs[2].User, '2001:3001')
   assert.deepEqual(createdSpecs[2].HostConfig.Binds, [
     '/srv/nextcloud-data/alice/files:/workspace',
-    '/srv/launcher-state/alice/config:/home/coder/.config',
-    '/srv/launcher-state/alice/data:/home/coder/.local/share/code-server',
+    '/srv/launcher-state/alice/config:/nvscode/config',
+    '/srv/launcher-state/alice/data:/nvscode/data',
   ])
   assert.deepEqual(createdSpecs[2].Entrypoint, ['sh', '-lc'])
   assert.match(createdSpecs[2].Cmd[0], /exec code-server/)
   assert.match(createdSpecs[2].Env.join('\n'), /CODE_SERVER_DEFAULT_EXTENSIONS=myriad-dreamin\.tinymist,mathematic\.vscode-pdf/)
+  assert.match(createdSpecs[2].Env.join('\n'), /HOME=\/tmp/)
+  assert.match(createdSpecs[2].Env.join('\n'), /XDG_CONFIG_HOME=\/nvscode\/config/)
+  assert.match(createdSpecs[2].Env.join('\n'), /XDG_DATA_HOME=\/nvscode\/data/)
   assert.match(session.iframePath, /^\/apps\/nvscode\/proxy\/session\//)
 
   const token = session.iframePath.split('/')[5]
@@ -359,6 +390,91 @@ test('ensureCodeServer recreates containers whose configured user no longer matc
   const container = {
     inspect: async () => ({
       Config: { User: '33:33' },
+      State: { Running: true },
+    }),
+    stop: async () => {
+      events.push('stop')
+    },
+    remove: async () => {
+      events.push('remove')
+    },
+  }
+  const docker = {
+    modem: {
+      followProgress: (_stream, callback) => callback(),
+    },
+    getImage: () => ({
+      inspect: async () => ({ Id: 'image-id' }),
+    }),
+    getContainer: () => container,
+    createContainer: async (spec) => {
+      if (spec.Cmd[0] === 'stat -c %u:%g /workspace-user-files') {
+        return {
+          start: async () => {},
+          wait: async () => ({ StatusCode: 0 }),
+          logs: async () => Buffer.from('2001:3001\n'),
+          remove: async () => {},
+        }
+      }
+
+      if (spec.User === '0:0') {
+        return {
+          start: async () => {},
+          wait: async () => ({ StatusCode: 0 }),
+        }
+      }
+
+      events.push(`create:${spec.User}`)
+      return {
+        start: async () => {
+          events.push('start')
+        },
+      }
+    },
+  }
+
+  const service = new SessionService({
+    docker,
+    config: {
+      sessionSigningSecret: 'secret',
+      defaultSessionTtlSeconds: 1800,
+      defaultIdleTimeoutSeconds: 900,
+      cleanupIntervalSeconds: 60,
+      nextcloudDataHostPath: '/srv/nextcloud-data',
+      launcherStateHostPath: '/srv/launcher-state',
+      dockerNetworkName: 'nvscode_default',
+      codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '33:33',
+      codeServerContainerPrefix: 'nvscode-code-server',
+      codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
+      fileScanIntervalSeconds: 15,
+    },
+    waitForCodeServerReady: async () => {
+      events.push('ready')
+    },
+  })
+
+  await service.ensureCodeServer('alice', 'nvscode-code-server:latest')
+
+  assert.deepEqual(events, ['stop', 'remove', 'create:2001:3001', 'start', 'ready'])
+})
+
+test('ensureCodeServer recreates containers that still use the legacy home-based state layout', async () => {
+  const events = []
+  const container = {
+    inspect: async () => ({
+      Config: {
+        User: '2001:3001',
+        Labels: {},
+        Env: ['HOME=/home/coder'],
+      },
+      HostConfig: {
+        Binds: [
+          '/srv/nextcloud-data/alice/files:/workspace',
+          '/srv/launcher-state/alice/config:/home/coder/.config',
+          '/srv/launcher-state/alice/data:/home/coder/.local/share/code-server',
+        ],
+      },
       State: { Running: true },
     }),
     stop: async () => {
