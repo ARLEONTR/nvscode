@@ -1,6 +1,7 @@
 <?php
 /** @var array{launcherUrl: string, sharedSecret: string, sessionTtlSeconds: int, idleTimeoutSeconds: int, codeServerImage: string} $_['settings'] */
 $standalone = isset($_['standalone']) && $_['standalone'] === true;
+$sharedSecretConfigured = $_['settings']['sharedSecret'] !== '';
 ?>
 <div class="section<?php if ($standalone) { ?> standalone<?php } ?>" id="nvscode-admin-settings">
   <h2>nVSCode</h2>
@@ -14,8 +15,11 @@ $standalone = isset($_['standalone']) && $_['standalone'] === true;
 
     <p>
       <label for="nvscode-shared-secret">Shared secret</label><br>
-      <input type="password" id="nvscode-shared-secret" name="sharedSecret" value="<?php p($_['settings']['sharedSecret']); ?>" class="settings-input">
-      <span class="settings-hint">This must match the launcher bootstrap secret until dynamic secret rotation is added.</span>
+      <input type="password" id="nvscode-shared-secret" name="sharedSecret" value="" class="settings-input" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <span class="settings-hint">This must match the launcher bootstrap secret until dynamic secret rotation is added. Leave this empty to keep the existing secret.</span>
+      <?php if ($sharedSecretConfigured) { ?>
+        <span class="settings-hint">A shared secret is currently configured.</span>
+      <?php } ?>
     </p>
 
     <p>

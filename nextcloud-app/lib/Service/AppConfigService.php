@@ -57,7 +57,14 @@ class AppConfigService {
      */
     public function saveSettings(array $values): void {
         $this->config->setAppValue(self::APP_ID, self::KEY_LAUNCHER_URL, $this->sanitizeLauncherUrl((string) ($values['launcherUrl'] ?? $this->getLauncherUrl())));
-        $this->config->setAppValue(self::APP_ID, self::KEY_SHARED_SECRET, trim((string) ($values['sharedSecret'] ?? $this->getSharedSecret())));
+
+        if (array_key_exists('sharedSecret', $values)) {
+            $sharedSecret = $this->sanitizeSharedSecret((string) $values['sharedSecret']);
+            if ($sharedSecret !== null) {
+                $this->config->setAppValue(self::APP_ID, self::KEY_SHARED_SECRET, $sharedSecret);
+            }
+        }
+
         $this->config->setAppValue(self::APP_ID, self::KEY_SESSION_TTL_SECONDS, (string) $this->normalizeIntValue($values['sessionTtlSeconds'] ?? $this->getSessionTtlSeconds(), 300, 86400));
         $this->config->setAppValue(self::APP_ID, self::KEY_IDLE_TIMEOUT_SECONDS, (string) $this->normalizeIntValue($values['idleTimeoutSeconds'] ?? $this->getIdleTimeoutSeconds(), 300, 86400));
         $this->config->setAppValue(self::APP_ID, self::KEY_CODE_SERVER_IMAGE, $this->sanitizeCodeServerImage((string) ($values['codeServerImage'] ?? $this->getCodeServerImage())));
@@ -126,6 +133,19 @@ class AppConfigService {
         $value = trim($value);
         if ($value === '') {
             return 'nvscode-code-server:latest';
+        }
+
+        return $value;
+    }
+
+    private function sanitizeSharedSecret(string $value): ?string {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_URL) !== false) {
+            throw new InvalidArgumentException('Shared secret must be a secret value, not a URL.');
         }
 
         return $value;
