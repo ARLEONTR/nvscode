@@ -121,7 +121,8 @@ Notes:
 - `LAUNCHER_STATE_HOST_PATH` is separate and stores code-server user state, extensions, and settings.
 - `DOCKER_NETWORK_NAME` must be a Docker network that both the launcher and the per-user code-server containers can use.
 - `CODE_SERVER_IMAGE` should be the image you built in step 1.
-- `CODE_SERVER_RUN_AS` should match the UID/GID that owns the mounted Nextcloud files on the host. A common Dockerized Nextcloud value is `33:33` for `www-data`.
+- the launcher probes `${NEXTCLOUD_DATA_HOST_PATH}/${userId}/files` and starts each code-server container with that directory's UID/GID
+- `CODE_SERVER_RUN_AS` is the fallback if that ownership probe is unavailable or returns unusable output. A common Dockerized Nextcloud value is `33:33` for `www-data`.
 
 If your existing Nextcloud runs in Docker, the easiest option is to attach the launcher to the same Docker network and point the app at the launcher's internal DNS name.
 
@@ -220,7 +221,8 @@ This means:
 
 - the launcher host must see the same filesystem tree
 - file permissions must allow the code-server container to read and write those files
-- set `CODE_SERVER_RUN_AS` so the code-server container runs as the same UID/GID that owns the mounted files
+- the launcher must be able to inspect `${NEXTCLOUD_DATA_HOST_PATH}/${userId}/files` so it can derive the correct UID/GID per user
+- keep `CODE_SERVER_RUN_AS` set to a sensible fallback such as `33:33`
 
 ## Step 7: Validate The Integration
 

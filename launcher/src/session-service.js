@@ -23,6 +23,7 @@ class SessionService {
     this.now = now
     this.waitForCodeServerReady = waitForCodeServerReady
     this.activity = new Map()
+    this.codeServerRunAsByUser = new Map()
     this.cleanupTimer = null
     this.fileScanTimer = null
   }
@@ -213,35 +214,47 @@ class SessionService {
   async ensureCodeServer(userId, image) {
     const containerName = sanitizeContainerName(userId, this.config.codeServerContainerPrefix)
     const container = this.docker.getContainer(containerName)
+    const workspacePath = userFilesHostPath(userId, this.config.nextcloudDataHostPath)
     const configPath = userConfigHostPath(userId, this.config.launcherStateHostPath)
     const dataPath = userDataHostPath(userId, this.config.launcherStateHostPath)
 
     await ensureImage(this.docker, image)
-    await ensureWritableStateDirectories(this.docker, image, {
-      configPath,
-      dataPath,
-      stateOwner: this.config.codeServerRunAs,
-    })
+    const runtimeOwner = await this.resolveCodeServerRunAs(userId, image, workspacePath)
 
     try {
       const details = await container.inspect()
-      if (!details.State.Running) {
-        await container.start()
+      if (normalizeContainerUser(details.Config && details.Config.User) === runtimeOwner) {
+        await ensureWritableStateDirectories(this.docker, image, {
+          configPath,
+          dataPath,
+          stateOwner: runtimeOwner,
+        })
+
+        if (!details.State.Running) {
+          await container.start()
+        }
+
+        await this.waitForCodeServerReady(containerName)
+        return containerName
       }
 
-      await this.waitForCodeServerReady(containerName)
-
-      return containerName
+      await stopAndRemoveContainer(container, details)
     } catch (error) {
       if (error.statusCode !== 404) {
         throw error
       }
     }
 
+    await ensureWritableStateDirectories(this.docker, image, {
+      configPath,
+      dataPath,
+      stateOwner: runtimeOwner,
+    })
+
     const created = await this.docker.createContainer({
       name: containerName,
       Image: image,
-      User: this.config.codeServerRunAs,
+      User: runtimeOwner,
       Entrypoint: ['sh', '-lc'],
       Cmd: [buildCodeServerStartupCommand()],
       Env: [
@@ -251,11 +264,12 @@ class SessionService {
       Labels: {
         'com.nvscode.role': 'code-server',
         'com.nvscode.user': userId,
+        'com.nvscode.run-as': runtimeOwner,
       },
       HostConfig: {
         AutoRemove: false,
         Binds: [
-          `${userFilesHostPath(userId, this.config.nextcloudDataHostPath)}:/workspace`,
+          `${workspacePath}:/workspace`,
           `${configPath}:${CODE_SERVER_CONFIG_PATH}`,
           `${dataPath}:${CODE_SERVER_DATA_PATH}`,
         ],
@@ -268,6 +282,17 @@ class SessionService {
     await this.waitForCodeServerReady(containerName)
 
     return containerName
+  }
+
+  async resolveCodeServerRunAs(userId, image, workspacePath) {
+    const cachedOwner = this.codeServerRunAsByUser.get(userId)
+    if (cachedOwner) {
+      return cachedOwner
+    }
+
+    const resolvedOwner = await resolveWorkspaceOwner(this.docker, image, workspacePath, this.config.codeServerRunAs)
+    this.codeServerRunAsByUser.set(userId, resolvedOwner)
+    return resolvedOwner
   }
 }
 
@@ -292,6 +317,55 @@ async function ensureWritableStateDirectories(docker, image, { configPath, dataP
   if (result.StatusCode !== 0) {
     throw new Error(`Failed to prepare code-server state directories at ${configPath} and ${dataPath}`)
   }
+}
+
+async function resolveWorkspaceOwner(docker, image, workspacePath, fallbackOwner) {
+  const probeContainer = await docker.createContainer({
+    Image: image,
+    User: '0:0',
+    Tty: true,
+    Entrypoint: ['sh', '-lc'],
+    Cmd: ['stat -c %u:%g /workspace-user-files'],
+    HostConfig: {
+      AutoRemove: false,
+      Binds: [`${workspacePath}:/workspace-user-files:ro`],
+    },
+  })
+
+  try {
+    await probeContainer.start()
+    const result = await probeContainer.wait()
+    const output = String(await probeContainer.logs({ stdout: true, stderr: true })).trim()
+
+    if (result.StatusCode !== 0) {
+      return fallbackOwner
+    }
+
+    return parseUidGidOutput(output, fallbackOwner)
+  } finally {
+    try {
+      await probeContainer.remove({ force: true })
+    } catch (_error) {
+    }
+  }
+}
+
+function parseUidGidOutput(output, fallbackOwner) {
+  const match = String(output).trim().match(/^(\d+:\d+)$/)
+  return match ? match[1] : fallbackOwner
+}
+
+function normalizeContainerUser(value) {
+  const normalized = typeof value === 'string' ? value.trim() : ''
+  return /^\d+:\d+$/.test(normalized) ? normalized : ''
+}
+
+async function stopAndRemoveContainer(container, details) {
+  if (details && details.State && details.State.Running) {
+    await container.stop({ t: 15 })
+  }
+
+  await container.remove({ force: true })
 }
 
 function buildCodeServerStartupCommand() {
@@ -590,10 +664,14 @@ module.exports = {
   ensureImage,
   ensureWritableStateDirectories,
   isSafeUserId,
+  normalizeContainerUser,
   normalizeWorkspacePath,
   parseOptionalInt,
+  parseUidGidOutput,
+  resolveWorkspaceOwner,
   sanitizeContainerName,
   sanitizeImage,
+  stopAndRemoveContainer,
   userConfigHostPath,
   userDataHostPath,
   userFilesHostPath,

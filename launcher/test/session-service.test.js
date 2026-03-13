@@ -4,9 +4,12 @@ const jwt = require('jsonwebtoken')
 const {
   buildNextcloudScanPath,
   buildCodeServerStartupCommand,
+  parseUidGidOutput,
+  resolveWorkspaceOwner,
   SessionService,
   normalizeWorkspacePath,
   sanitizeContainerName,
+  stopAndRemoveContainer,
   userConfigHostPath,
   userDataHostPath,
   userFilesHostPath,
@@ -48,12 +51,34 @@ test('buildCodeServerStartupCommand installs default extensions before startup',
   assert.match(command, /exec code-server/)
 })
 
+test('resolveWorkspaceOwner parses uid and gid from a mounted workspace probe', async () => {
+  let removed = false
+  const docker = {
+    createContainer: async (spec) => {
+      assert.deepEqual(spec.HostConfig.Binds, ['/srv/nextcloud-data/alice/files:/workspace-user-files:ro'])
+      return {
+        start: async () => {},
+        wait: async () => ({ StatusCode: 0 }),
+        logs: async () => Buffer.from('2001:3001\n'),
+        remove: async () => {
+          removed = true
+        },
+      }
+    },
+  }
+
+  const runAs = await resolveWorkspaceOwner(docker, 'nvscode-code-server:latest', '/srv/nextcloud-data/alice/files', '33:33')
+
+  assert.equal(runAs, '2001:3001')
+  assert.equal(removed, true)
+})
+
+test('parseUidGidOutput falls back when the probe output is not usable', () => {
+  assert.equal(parseUidGidOutput('not-a-uidgid', '33:33'), '33:33')
+})
+
 test('createSession provisions a container with workspace and state mounts', async () => {
   const createdSpecs = []
-  const createdContainer = {
-    start: async () => {},
-    wait: async () => ({ StatusCode: 0 }),
-  }
   const docker = {
     modem: {
       followProgress: (_stream, callback) => callback(),
@@ -75,7 +100,19 @@ test('createSession provisions a container with workspace and state mounts', asy
     }),
     createContainer: async (spec) => {
       createdSpecs.push(spec)
-      return createdContainer
+      if (spec.Cmd[0] === 'stat -c %u:%g /workspace-user-files') {
+        return {
+          start: async () => {},
+          wait: async () => ({ StatusCode: 0 }),
+          logs: async () => Buffer.from('2001:3001\n'),
+          remove: async () => {},
+        }
+      }
+
+      return {
+        start: async () => {},
+        wait: async () => ({ StatusCode: 0 }),
+      }
     },
   }
 
@@ -106,22 +143,27 @@ test('createSession provisions a container with workspace and state mounts', asy
     idleTimeoutSeconds: 1200,
   })
 
-  assert.equal(createdSpecs.length, 2)
+  assert.equal(createdSpecs.length, 3)
   assert.equal(createdSpecs[0].User, '0:0')
-  assert.match(createdSpecs[0].Cmd[0], /chown -R 33:33 \/config \/data/)
+  assert.equal(createdSpecs[0].Cmd[0], 'stat -c %u:%g /workspace-user-files')
   assert.deepEqual(createdSpecs[0].HostConfig.Binds, [
+    '/srv/nextcloud-data/alice/files:/workspace-user-files:ro',
+  ])
+  assert.equal(createdSpecs[1].User, '0:0')
+  assert.match(createdSpecs[1].Cmd[0], /chown -R 2001:3001 \/config \/data/)
+  assert.deepEqual(createdSpecs[1].HostConfig.Binds, [
     '/srv/launcher-state/alice/config:/config',
     '/srv/launcher-state/alice/data:/data',
   ])
-  assert.equal(createdSpecs[1].User, '33:33')
-  assert.deepEqual(createdSpecs[1].HostConfig.Binds, [
+  assert.equal(createdSpecs[2].User, '2001:3001')
+  assert.deepEqual(createdSpecs[2].HostConfig.Binds, [
     '/srv/nextcloud-data/alice/files:/workspace',
     '/srv/launcher-state/alice/config:/home/coder/.config',
     '/srv/launcher-state/alice/data:/home/coder/.local/share/code-server',
   ])
-  assert.deepEqual(createdSpecs[1].Entrypoint, ['sh', '-lc'])
-  assert.match(createdSpecs[1].Cmd[0], /exec code-server/)
-  assert.match(createdSpecs[1].Env.join('\n'), /CODE_SERVER_DEFAULT_EXTENSIONS=myriad-dreamin\.tinymist,mathematic\.vscode-pdf/)
+  assert.deepEqual(createdSpecs[2].Entrypoint, ['sh', '-lc'])
+  assert.match(createdSpecs[2].Cmd[0], /exec code-server/)
+  assert.match(createdSpecs[2].Env.join('\n'), /CODE_SERVER_DEFAULT_EXTENSIONS=myriad-dreamin\.tinymist,mathematic\.vscode-pdf/)
   assert.match(session.iframePath, /^\/apps\/nvscode\/proxy\/session\//)
 
   const token = session.iframePath.split('/')[5]
@@ -249,6 +291,22 @@ test('ensureCodeServer waits for readiness before returning a new container', as
       },
     }),
     createContainer: async (spec) => {
+      if (spec.Cmd[0] === 'stat -c %u:%g /workspace-user-files') {
+        return {
+          start: async () => {
+            events.push('probe-start')
+          },
+          wait: async () => {
+            events.push('probe-ready')
+            return { StatusCode: 0 }
+          },
+          logs: async () => Buffer.from('2001:3001\n'),
+          remove: async () => {
+            events.push('probe-remove')
+          },
+        }
+      }
+
       if (spec.User === '0:0') {
         return {
           start: async () => {
@@ -293,5 +351,94 @@ test('ensureCodeServer waits for readiness before returning a new container', as
   const containerName = await service.ensureCodeServer('alice', 'nvscode-code-server:latest')
 
   assert.match(containerName, /^nvscode-code-server-alice-[a-f0-9]{12}$/)
-  assert.deepEqual(events, ['prepare-start', 'prepare-ready', 'start', 'ready'])
+  assert.deepEqual(events, ['probe-start', 'probe-ready', 'probe-remove', 'prepare-start', 'prepare-ready', 'start', 'ready'])
+})
+
+test('ensureCodeServer recreates containers whose configured user no longer matches the workspace owner', async () => {
+  const events = []
+  const container = {
+    inspect: async () => ({
+      Config: { User: '33:33' },
+      State: { Running: true },
+    }),
+    stop: async () => {
+      events.push('stop')
+    },
+    remove: async () => {
+      events.push('remove')
+    },
+  }
+  const docker = {
+    modem: {
+      followProgress: (_stream, callback) => callback(),
+    },
+    getImage: () => ({
+      inspect: async () => ({ Id: 'image-id' }),
+    }),
+    getContainer: () => container,
+    createContainer: async (spec) => {
+      if (spec.Cmd[0] === 'stat -c %u:%g /workspace-user-files') {
+        return {
+          start: async () => {},
+          wait: async () => ({ StatusCode: 0 }),
+          logs: async () => Buffer.from('2001:3001\n'),
+          remove: async () => {},
+        }
+      }
+
+      if (spec.User === '0:0') {
+        return {
+          start: async () => {},
+          wait: async () => ({ StatusCode: 0 }),
+        }
+      }
+
+      events.push(`create:${spec.User}`)
+      return {
+        start: async () => {
+          events.push('start')
+        },
+      }
+    },
+  }
+
+  const service = new SessionService({
+    docker,
+    config: {
+      sessionSigningSecret: 'secret',
+      defaultSessionTtlSeconds: 1800,
+      defaultIdleTimeoutSeconds: 900,
+      cleanupIntervalSeconds: 60,
+      nextcloudDataHostPath: '/srv/nextcloud-data',
+      launcherStateHostPath: '/srv/launcher-state',
+      dockerNetworkName: 'nvscode_default',
+      codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '33:33',
+      codeServerContainerPrefix: 'nvscode-code-server',
+      codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
+      fileScanIntervalSeconds: 15,
+    },
+    waitForCodeServerReady: async () => {
+      events.push('ready')
+    },
+  })
+
+  await service.ensureCodeServer('alice', 'nvscode-code-server:latest')
+
+  assert.deepEqual(events, ['stop', 'remove', 'create:2001:3001', 'start', 'ready'])
+})
+
+test('stopAndRemoveContainer stops running containers before removing them', async () => {
+  const events = []
+
+  await stopAndRemoveContainer({
+    stop: async () => {
+      events.push('stop')
+    },
+    remove: async () => {
+      events.push('remove')
+    },
+  }, { State: { Running: true } })
+
+  assert.deepEqual(events, ['stop', 'remove'])
 })

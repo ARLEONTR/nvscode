@@ -34,7 +34,7 @@ If you want to integrate nVSCode into an already-running Nextcloud instead of us
 1. Copy `.env.example` to `.env`.
 2. Set `NEXTCLOUD_DATA_HOST_PATH` to the absolute path of `docker-data/nextcloud-data` in this workspace.
 3. Set `LAUNCHER_STATE_HOST_PATH` to an absolute path for persistent code-server state, for example `docker-data/launcher-state`.
-4. `CODE_SERVER_RUN_AS` defaults to `33:33` for the bundled Dockerized Nextcloud stack. If your Nextcloud files are owned by a different UID/GID, set it explicitly.
+4. The launcher probes each user's `${NEXTCLOUD_DATA_HOST_PATH}/<user>/files` directory and starts code-server with that UID/GID when it can. `CODE_SERVER_RUN_AS` remains the fallback and defaults to `33:33` for the bundled Dockerized Nextcloud stack.
 5. Start the stack with `docker compose up --build`.
 6. Open `http://localhost:8080` and finish the Nextcloud installation if prompted.
 7. Enable the app inside the Nextcloud container with `docker compose exec nextcloud php occ app:enable nvscode`.
