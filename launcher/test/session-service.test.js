@@ -7,6 +7,8 @@ const {
   SessionService,
   normalizeWorkspacePath,
   sanitizeContainerName,
+  userConfigHostPath,
+  userDataHostPath,
   userFilesHostPath,
   userStateHostPath,
   workspaceToContainerPath,
@@ -28,6 +30,8 @@ test('path helpers derive stable mount points', () => {
   )
   assert.equal(userFilesHostPath('alice', '/data'), '/data/alice/files')
   assert.equal(userStateHostPath('alice', '/state'), '/state/alice')
+  assert.equal(userConfigHostPath('alice', '/state'), '/state/alice/config')
+  assert.equal(userDataHostPath('alice', '/state'), '/state/alice/data')
   assert.equal(buildNextcloudScanPath('alice', '/'), 'alice/files')
   assert.equal(buildNextcloudScanPath('alice', '/Documents'), 'alice/files/Documents')
 })
@@ -104,11 +108,13 @@ test('createSession provisions a container with workspace and state mounts', asy
   assert.equal(createdSpecs.length, 2)
   assert.equal(createdSpecs[0].User, '0:0')
   assert.deepEqual(createdSpecs[0].HostConfig.Binds, [
-    '/srv/launcher-state/alice:/state',
+    '/srv/launcher-state/alice/config:/config',
+    '/srv/launcher-state/alice/data:/data',
   ])
   assert.deepEqual(createdSpecs[1].HostConfig.Binds, [
     '/srv/nextcloud-data/alice/files:/workspace',
-    '/srv/launcher-state/alice:/home/coder',
+    '/srv/launcher-state/alice/config:/home/coder/.config',
+    '/srv/launcher-state/alice/data:/home/coder/.local/share/code-server',
   ])
   assert.deepEqual(createdSpecs[1].Entrypoint, ['sh', '-lc'])
   assert.match(createdSpecs[1].Cmd[0], /exec code-server/)

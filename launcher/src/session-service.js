@@ -14,6 +14,8 @@ const CODE_SERVER_ENTRYPOINT = [
 ]
 
 const CODE_SERVER_STATE_OWNER = '1000:1000'
+const CODE_SERVER_CONFIG_PATH = '/home/coder/.config'
+const CODE_SERVER_DATA_PATH = '/home/coder/.local/share/code-server'
 
 class SessionService {
   constructor({ docker, config, now = () => Date.now(), waitForCodeServerReady = defaultWaitForCodeServerReady }) {
@@ -212,10 +214,11 @@ class SessionService {
   async ensureCodeServer(userId, image) {
     const containerName = sanitizeContainerName(userId, this.config.codeServerContainerPrefix)
     const container = this.docker.getContainer(containerName)
-    const statePath = userStateHostPath(userId, this.config.launcherStateHostPath)
+    const configPath = userConfigHostPath(userId, this.config.launcherStateHostPath)
+    const dataPath = userDataHostPath(userId, this.config.launcherStateHostPath)
 
     await ensureImage(this.docker, image)
-    await ensureWritableStateDirectory(this.docker, image, statePath)
+    await ensureWritableStateDirectories(this.docker, image, { configPath, dataPath })
 
     try {
       const details = await container.inspect()
@@ -249,7 +252,8 @@ class SessionService {
         AutoRemove: false,
         Binds: [
           `${userFilesHostPath(userId, this.config.nextcloudDataHostPath)}:/workspace`,
-          `${statePath}:/home/coder`,
+          `${configPath}:${CODE_SERVER_CONFIG_PATH}`,
+          `${dataPath}:${CODE_SERVER_DATA_PATH}`,
         ],
         NetworkMode: this.config.dockerNetworkName,
         RestartPolicy: { Name: 'unless-stopped' },
@@ -263,15 +267,18 @@ class SessionService {
   }
 }
 
-async function ensureWritableStateDirectory(docker, image, hostPath) {
+async function ensureWritableStateDirectories(docker, image, { configPath, dataPath }) {
   const initContainer = await docker.createContainer({
     Image: image,
     User: '0:0',
     Entrypoint: ['sh', '-lc'],
-    Cmd: [`mkdir -p /state && chown -R ${CODE_SERVER_STATE_OWNER} /state`],
+    Cmd: [`mkdir -p /config /data && chown -R ${CODE_SERVER_STATE_OWNER} /config /data`],
     HostConfig: {
       AutoRemove: true,
-      Binds: [`${hostPath}:/state`],
+      Binds: [
+        `${configPath}:/config`,
+        `${dataPath}:/data`,
+      ],
     },
   })
 
@@ -279,7 +286,7 @@ async function ensureWritableStateDirectory(docker, image, hostPath) {
   const result = await initContainer.wait()
 
   if (result.StatusCode !== 0) {
-    throw new Error(`Failed to prepare code-server state directory at ${hostPath}`)
+    throw new Error(`Failed to prepare code-server state directories at ${configPath} and ${dataPath}`)
   }
 }
 
@@ -550,6 +557,14 @@ function userStateHostPath(userId, rootPath) {
   return `${rootPath}/${userId}`
 }
 
+function userConfigHostPath(userId, rootPath) {
+  return `${userStateHostPath(userId, rootPath)}/config`
+}
+
+function userDataHostPath(userId, rootPath) {
+  return `${userStateHostPath(userId, rootPath)}/data`
+}
+
 function sanitizeImage(value, fallback) {
   const normalized = typeof value === 'string' ? value.trim() : ''
   return normalized === '' ? fallback : normalized
@@ -569,12 +584,14 @@ module.exports = {
   buildCodeServerStartupCommand,
   SessionService,
   ensureImage,
-  ensureWritableStateDirectory,
+  ensureWritableStateDirectories,
   isSafeUserId,
   normalizeWorkspacePath,
   parseOptionalInt,
   sanitizeContainerName,
   sanitizeImage,
+  userConfigHostPath,
+  userDataHostPath,
   userFilesHostPath,
   userStateHostPath,
   workspaceToContainerPath,
