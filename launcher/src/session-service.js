@@ -214,6 +214,9 @@ class SessionService {
     const container = this.docker.getContainer(containerName)
     const statePath = userStateHostPath(userId, this.config.launcherStateHostPath)
 
+    await ensureImage(this.docker, image)
+    await ensureWritableStateDirectory(this.docker, image, statePath)
+
     try {
       const details = await container.inspect()
       if (!details.State.Running) {
@@ -228,9 +231,6 @@ class SessionService {
         throw error
       }
     }
-
-    await ensureImage(this.docker, image)
-    await ensureWritableStateDirectory(this.docker, image, statePath)
 
     const created = await this.docker.createContainer({
       name: containerName,
