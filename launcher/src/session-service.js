@@ -169,9 +169,9 @@ class SessionService {
     const exec = await container.exec({
       AttachStdout: true,
       AttachStderr: true,
-      User: 'www-data',
-      WorkingDir: '/var/www/html',
-      Cmd: ['php', 'occ', 'files:scan', `--path=${scanPath}`],
+      User: this.config.nextcloudExecUser,
+      WorkingDir: this.config.nextcloudExecWorkingDir,
+      Cmd: ['sh', '-lc', buildNextcloudScanCommand(this.config.nextcloudOccCommand, scanPath)],
     })
 
     await new Promise((resolve, reject) => {
@@ -199,15 +199,32 @@ class SessionService {
   }
 
   async getNextcloudContainer() {
+    if (this.config.nextcloudContainerName) {
+      const container = this.docker.getContainer(this.config.nextcloudContainerName)
+
+      try {
+        await container.inspect()
+        return container
+      } catch (error) {
+        if (error.statusCode !== 404) {
+          throw error
+        }
+      }
+    }
+
+    if (!this.config.nextcloudContainerLabel) {
+      throw new Error('Nextcloud container not found. Configure NEXTCLOUD_CONTAINER_NAME or NEXTCLOUD_CONTAINER_LABEL.')
+    }
+
     const containers = await this.docker.listContainers({
       all: true,
       filters: {
-        label: ['com.docker.compose.service=nextcloud'],
+        label: [this.config.nextcloudContainerLabel],
       },
     })
 
     if (containers.length === 0) {
-      throw new Error('Nextcloud container not found')
+      throw new Error(`Nextcloud container not found. Checked NEXTCLOUD_CONTAINER_NAME=${this.config.nextcloudContainerName || '<unset>'} and NEXTCLOUD_CONTAINER_LABEL=${this.config.nextcloudContainerLabel}.`)
     }
 
     return this.docker.getContainer(containers[0].Id)
@@ -363,6 +380,10 @@ async function resolveWorkspaceOwner(docker, image, workspacePath, fallbackOwner
 function parseUidGidOutput(output, fallbackOwner) {
   const match = String(output).trim().match(/^(\d+:\d+)$/)
   return match ? match[1] : fallbackOwner
+}
+
+function buildNextcloudScanCommand(occCommand, scanPath) {
+  return `${occCommand} files:scan ${shellQuote(`--path=${scanPath}`)}`
 }
 
 function normalizeContainerUser(value) {
@@ -690,6 +711,7 @@ function shellQuote(value) {
 
 module.exports = {
   buildNextcloudScanPath,
+  buildNextcloudScanCommand,
   buildCodeServerStartupCommand,
   SessionService,
   ensureImage,

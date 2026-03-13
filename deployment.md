@@ -101,6 +101,10 @@ services:
       SESSION_SIGNING_SECRET: use-a-second-long-random-value
       NEXTCLOUD_DATA_HOST_PATH: /srv/nextcloud/data
       LAUNCHER_STATE_HOST_PATH: /srv/nvscode/state
+      NEXTCLOUD_CONTAINER_NAME: nextcloud-app
+      NEXTCLOUD_EXEC_USER: www-data
+      NEXTCLOUD_EXEC_WORKING_DIR: /var/www/html
+      NEXTCLOUD_OCC_COMMAND: php occ
       DOCKER_NETWORK_NAME: nextcloud_default
       CODE_SERVER_IMAGE: registry.example.com/nvscode-code-server:latest
       CODE_SERVER_RUN_AS: 33:33
@@ -119,6 +123,8 @@ Notes:
 
 - `NEXTCLOUD_DATA_HOST_PATH` must be the real host path of the existing Nextcloud data directory.
 - `LAUNCHER_STATE_HOST_PATH` is separate and stores code-server user state, extensions, and settings.
+- `NEXTCLOUD_CONTAINER_NAME` should point to the running Nextcloud container the launcher can `docker exec` into for `occ files:scan`. If omitted, the launcher falls back to `NEXTCLOUD_CONTAINER_LABEL`.
+- `NEXTCLOUD_EXEC_USER`, `NEXTCLOUD_EXEC_WORKING_DIR`, and `NEXTCLOUD_OCC_COMMAND` control how the launcher runs `occ files:scan` inside that container.
 - `DOCKER_NETWORK_NAME` must be a Docker network that both the launcher and the per-user code-server containers can use.
 - `CODE_SERVER_IMAGE` should be the image you built in step 1.
 - the launcher probes `${NEXTCLOUD_DATA_HOST_PATH}/${userId}/files` and starts each code-server container with that directory's UID/GID

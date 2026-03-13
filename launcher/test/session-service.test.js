@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const jwt = require('jsonwebtoken')
 const {
+  buildNextcloudScanCommand,
   buildNextcloudScanPath,
   buildCodeServerStartupCommand,
   isCodeServerContainerCompatible,
@@ -25,6 +26,7 @@ test('normalizeWorkspacePath blocks traversal and preserves root', () => {
 })
 
 test('path helpers derive stable mount points', () => {
+  assert.equal(buildNextcloudScanCommand('php occ', 'alice/files/Documents'), "php occ files:scan '--path=alice/files/Documents'")
   assert.equal(workspaceToContainerPath('/'), '/workspace')
   assert.equal(workspaceToContainerPath('/Docs'), '/workspace/Docs')
   assert.match(sanitizeContainerName('Alice.Example', 'code'), /^code-alice-example-[a-f0-9]{12}$/)
@@ -280,6 +282,11 @@ test('scanActiveUsers rescans active workspace paths through the Nextcloud conta
       defaultIdleTimeoutSeconds: 600,
       cleanupIntervalSeconds: 60,
       fileScanIntervalSeconds: 15,
+      nextcloudContainerName: '',
+      nextcloudContainerLabel: 'com.docker.compose.service=nextcloud',
+      nextcloudExecUser: 'www-data',
+      nextcloudExecWorkingDir: '/var/www/html',
+      nextcloudOccCommand: 'php occ',
       nextcloudDataHostPath: '/srv/nextcloud-data',
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
@@ -301,8 +308,72 @@ test('scanActiveUsers rescans active workspace paths through the Nextcloud conta
 
   await service.scanActiveUsers()
 
-  assert.deepEqual(commands[0], ['php', 'occ', 'files:scan', '--path=alice/files/Documents'])
+  assert.deepEqual(commands[0], ['sh', '-lc', "php occ files:scan '--path=alice/files/Documents'"])
   assert.equal(service.activity.get('alice').lastScannedAt, 20_000)
+})
+
+test('scanActiveUsers can target a configured Nextcloud container name', async () => {
+  const commands = []
+  const docker = {
+    getContainer: (id) => ({
+      inspect: async () => ({ Id: id, State: { Running: true } }),
+      exec: async ({ Cmd, User, WorkingDir }) => ({
+        start: (callback) => {
+          commands.push({ Cmd, User, WorkingDir, id })
+          callback(null, {
+            on(event, handler) {
+              if (event === 'end') {
+                handler()
+              }
+            },
+            resume() {},
+          })
+        },
+        inspect: async () => ({ ExitCode: 0 }),
+      }),
+    }),
+  }
+
+  const service = new SessionService({
+    docker,
+    config: {
+      sessionSigningSecret: 'secret',
+      defaultSessionTtlSeconds: 1800,
+      defaultIdleTimeoutSeconds: 600,
+      cleanupIntervalSeconds: 60,
+      fileScanIntervalSeconds: 15,
+      nextcloudContainerName: 'custom-nextcloud',
+      nextcloudContainerLabel: '',
+      nextcloudExecUser: 'apache',
+      nextcloudExecWorkingDir: '/var/www/nextcloud',
+      nextcloudOccCommand: 'sudo -u www-data php occ',
+      nextcloudDataHostPath: '/srv/nextcloud-data',
+      launcherStateHostPath: '/srv/launcher-state',
+      dockerNetworkName: 'nvscode_default',
+      codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '1000:1000',
+      codeServerContainerPrefix: 'nvscode-code-server',
+      codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
+    },
+    now: () => 20_000,
+    waitForCodeServerReady: async () => {},
+  })
+
+  service.activity.set('alice', {
+    lastSeenAt: 20_000,
+    lastScannedAt: 0,
+    idleTimeoutSeconds: 600,
+    workspacePath: '/Documents',
+  })
+
+  await service.scanActiveUsers()
+
+  assert.deepEqual(commands[0], {
+    id: 'custom-nextcloud',
+    User: 'apache',
+    WorkingDir: '/var/www/nextcloud',
+    Cmd: ['sh', '-lc', "sudo -u www-data php occ files:scan '--path=alice/files/Documents'"],
+  })
 })
 
 test('ensureCodeServer waits for readiness before returning a new container', async () => {
@@ -365,6 +436,11 @@ test('ensureCodeServer waits for readiness before returning a new container', as
       defaultSessionTtlSeconds: 1800,
       defaultIdleTimeoutSeconds: 900,
       cleanupIntervalSeconds: 60,
+      nextcloudContainerName: '',
+      nextcloudContainerLabel: 'com.docker.compose.service=nextcloud',
+      nextcloudExecUser: 'www-data',
+      nextcloudExecWorkingDir: '/var/www/html',
+      nextcloudOccCommand: 'php occ',
       nextcloudDataHostPath: '/srv/nextcloud-data',
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
@@ -440,6 +516,11 @@ test('ensureCodeServer recreates containers whose configured user no longer matc
       defaultSessionTtlSeconds: 1800,
       defaultIdleTimeoutSeconds: 900,
       cleanupIntervalSeconds: 60,
+      nextcloudContainerName: '',
+      nextcloudContainerLabel: 'com.docker.compose.service=nextcloud',
+      nextcloudExecUser: 'www-data',
+      nextcloudExecWorkingDir: '/var/www/html',
+      nextcloudOccCommand: 'php occ',
       nextcloudDataHostPath: '/srv/nextcloud-data',
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
@@ -525,6 +606,11 @@ test('ensureCodeServer recreates containers that still use the legacy home-based
       defaultSessionTtlSeconds: 1800,
       defaultIdleTimeoutSeconds: 900,
       cleanupIntervalSeconds: 60,
+      nextcloudContainerName: '',
+      nextcloudContainerLabel: 'com.docker.compose.service=nextcloud',
+      nextcloudExecUser: 'www-data',
+      nextcloudExecWorkingDir: '/var/www/html',
+      nextcloudOccCommand: 'php occ',
       nextcloudDataHostPath: '/srv/nextcloud-data',
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
