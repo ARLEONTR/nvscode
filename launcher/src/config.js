@@ -18,6 +18,16 @@ function parseCsvList(value, fallback = []) {
     .filter((entry, index, values) => entry !== '' && values.indexOf(entry) === index)
 }
 
+function parseUidGid(value, fallback) {
+  const source = typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback
+
+  if (!/^\d+:\d+$/.test(source)) {
+    throw new Error('CODE_SERVER_RUN_AS must use the format <uid>:<gid>')
+  }
+
+  return source
+}
+
 function createConfig(env = process.env) {
   return {
     port: parseIntValue(env.PORT, 3000),
@@ -27,6 +37,7 @@ function createConfig(env = process.env) {
     launcherStateHostPath: (env.LAUNCHER_STATE_HOST_PATH || '').replace(/\/+$/, ''),
     dockerNetworkName: env.DOCKER_NETWORK_NAME || 'nvscode_default',
     codeServerImage: env.CODE_SERVER_IMAGE || 'nvscode-code-server:latest',
+    codeServerRunAs: parseUidGid(env.CODE_SERVER_RUN_AS, '33:33'),
     codeServerContainerPrefix: env.CODE_SERVER_CONTAINER_PREFIX || 'nvscode-code-server',
     codeServerDefaultExtensions: parseCsvList(env.CODE_SERVER_DEFAULT_EXTENSIONS, ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf']),
     defaultSessionTtlSeconds: clamp(parseIntValue(env.DEFAULT_SESSION_TTL_SECONDS, 3600), 300, 86400),
@@ -59,5 +70,6 @@ module.exports = {
   createConfig,
   parseCsvList,
   parseIntValue,
+  parseUidGid,
   validateConfig,
 }

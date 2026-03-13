@@ -13,7 +13,6 @@ const CODE_SERVER_ENTRYPOINT = [
   '/workspace',
 ]
 
-const CODE_SERVER_STATE_OWNER = '1000:1000'
 const CODE_SERVER_CONFIG_PATH = '/home/coder/.config'
 const CODE_SERVER_DATA_PATH = '/home/coder/.local/share/code-server'
 
@@ -218,7 +217,11 @@ class SessionService {
     const dataPath = userDataHostPath(userId, this.config.launcherStateHostPath)
 
     await ensureImage(this.docker, image)
-    await ensureWritableStateDirectories(this.docker, image, { configPath, dataPath })
+    await ensureWritableStateDirectories(this.docker, image, {
+      configPath,
+      dataPath,
+      stateOwner: this.config.codeServerRunAs,
+    })
 
     try {
       const details = await container.inspect()
@@ -238,6 +241,7 @@ class SessionService {
     const created = await this.docker.createContainer({
       name: containerName,
       Image: image,
+      User: this.config.codeServerRunAs,
       Entrypoint: ['sh', '-lc'],
       Cmd: [buildCodeServerStartupCommand()],
       Env: [
@@ -267,12 +271,12 @@ class SessionService {
   }
 }
 
-async function ensureWritableStateDirectories(docker, image, { configPath, dataPath }) {
+async function ensureWritableStateDirectories(docker, image, { configPath, dataPath, stateOwner }) {
   const initContainer = await docker.createContainer({
     Image: image,
     User: '0:0',
     Entrypoint: ['sh', '-lc'],
-    Cmd: [`mkdir -p /config /data && chown -R ${CODE_SERVER_STATE_OWNER} /config /data`],
+    Cmd: [`mkdir -p /config /data && chown -R ${stateOwner} /config /data`],
     HostConfig: {
       AutoRemove: true,
       Binds: [

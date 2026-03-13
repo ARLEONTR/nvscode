@@ -90,6 +90,7 @@ test('createSession provisions a container with workspace and state mounts', asy
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
       codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '33:33',
       codeServerContainerPrefix: 'nvscode-code-server',
       codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
       fileScanIntervalSeconds: 15,
@@ -107,10 +108,12 @@ test('createSession provisions a container with workspace and state mounts', asy
 
   assert.equal(createdSpecs.length, 2)
   assert.equal(createdSpecs[0].User, '0:0')
+  assert.match(createdSpecs[0].Cmd[0], /chown -R 33:33 \/config \/data/)
   assert.deepEqual(createdSpecs[0].HostConfig.Binds, [
     '/srv/launcher-state/alice/config:/config',
     '/srv/launcher-state/alice/data:/data',
   ])
+  assert.equal(createdSpecs[1].User, '33:33')
   assert.deepEqual(createdSpecs[1].HostConfig.Binds, [
     '/srv/nextcloud-data/alice/files:/workspace',
     '/srv/launcher-state/alice/config:/home/coder/.config',
@@ -149,6 +152,7 @@ test('cleanupIdleContainers stops stale running containers', async () => {
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
       codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '1000:1000',
       codeServerContainerPrefix: 'nvscode-code-server',
       codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
       fileScanIntervalSeconds: 15,
@@ -207,6 +211,7 @@ test('scanActiveUsers rescans active workspace paths through the Nextcloud conta
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
       codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '1000:1000',
       codeServerContainerPrefix: 'nvscode-code-server',
       codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
     },
@@ -275,6 +280,7 @@ test('ensureCodeServer waits for readiness before returning a new container', as
       launcherStateHostPath: '/srv/launcher-state',
       dockerNetworkName: 'nvscode_default',
       codeServerImage: 'nvscode-code-server:latest',
+      codeServerRunAs: '1000:1000',
       codeServerContainerPrefix: 'nvscode-code-server',
       codeServerDefaultExtensions: ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf'],
       fileScanIntervalSeconds: 15,

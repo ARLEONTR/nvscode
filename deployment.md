@@ -103,6 +103,7 @@ services:
       LAUNCHER_STATE_HOST_PATH: /srv/nvscode/state
       DOCKER_NETWORK_NAME: nextcloud_default
       CODE_SERVER_IMAGE: registry.example.com/nvscode-code-server:latest
+      CODE_SERVER_RUN_AS: 33:33
       CODE_SERVER_CONTAINER_PREFIX: nvscode-code-server
       CODE_SERVER_DEFAULT_EXTENSIONS: myriad-dreamin.tinymist,mathematic.vscode-pdf
       DEFAULT_SESSION_TTL_SECONDS: 3600
@@ -120,6 +121,7 @@ Notes:
 - `LAUNCHER_STATE_HOST_PATH` is separate and stores code-server user state, extensions, and settings.
 - `DOCKER_NETWORK_NAME` must be a Docker network that both the launcher and the per-user code-server containers can use.
 - `CODE_SERVER_IMAGE` should be the image you built in step 1.
+- `CODE_SERVER_RUN_AS` should match the UID/GID that owns the mounted Nextcloud files on the host. A common Dockerized Nextcloud value is `33:33` for `www-data`.
 
 If your existing Nextcloud runs in Docker, the easiest option is to attach the launcher to the same Docker network and point the app at the launcher's internal DNS name.
 
@@ -218,7 +220,7 @@ This means:
 
 - the launcher host must see the same filesystem tree
 - file permissions must allow the code-server container to read and write those files
-- UID/GID mismatches may need to be handled on your side depending on how your existing Nextcloud stores permissions
+- set `CODE_SERVER_RUN_AS` so the code-server container runs as the same UID/GID that owns the mounted files
 
 ## Step 7: Validate The Integration
 
