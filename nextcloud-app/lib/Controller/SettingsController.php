@@ -6,6 +6,7 @@ namespace OCA\NVSCode\Controller;
 
 use OCA\NVSCode\Service\AppConfigService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IRequest;
@@ -23,6 +24,7 @@ class SettingsController extends Controller {
     /**
      * @AdminRequired
      */
+    #[NoCSRFRequired]
     public function page(): TemplateResponse {
         return new TemplateResponse($this->appName, 'admin-settings', [
             'settings' => $this->appConfig->getSettings(),

@@ -6,6 +6,7 @@ namespace OCA\NVSCode\Controller;
 
 use OCA\NVSCode\Service\LauncherService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -31,6 +32,7 @@ class EditorController extends Controller {
     /**
      * @NoAdminRequired
      */
+    #[NoCSRFRequired]
     public function open(): TemplateResponse {
         $user = $this->userSession->getUser();
 
