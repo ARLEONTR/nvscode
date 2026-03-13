@@ -21,7 +21,11 @@ test('normalizeWorkspacePath blocks traversal and preserves root', () => {
 test('path helpers derive stable mount points', () => {
   assert.equal(workspaceToContainerPath('/'), '/workspace')
   assert.equal(workspaceToContainerPath('/Docs'), '/workspace/Docs')
-  assert.equal(sanitizeContainerName('Alice.Example', 'code'), 'code-alice-example')
+  assert.match(sanitizeContainerName('Alice.Example', 'code'), /^code-alice-example-[a-f0-9]{12}$/)
+  assert.notEqual(
+    sanitizeContainerName('Alice.Example', 'code'),
+    sanitizeContainerName('alice-example', 'code')
+  )
   assert.equal(userFilesHostPath('alice', '/data'), '/data/alice/files')
   assert.equal(userStateHostPath('alice', '/state'), '/state/alice')
   assert.equal(buildNextcloudScanPath('alice', '/'), 'alice/files')
@@ -44,6 +48,7 @@ test('createSession provisions a container with workspace and state mounts', asy
   const createdSpecs = []
   const createdContainer = {
     start: async () => {},
+    wait: async () => ({ StatusCode: 0 }),
   }
   const docker = {
     modem: {
@@ -96,14 +101,18 @@ test('createSession provisions a container with workspace and state mounts', asy
     idleTimeoutSeconds: 1200,
   })
 
-  assert.equal(createdSpecs.length, 1)
+  assert.equal(createdSpecs.length, 2)
+  assert.equal(createdSpecs[0].User, '0:0')
   assert.deepEqual(createdSpecs[0].HostConfig.Binds, [
+    '/srv/launcher-state/alice:/state',
+  ])
+  assert.deepEqual(createdSpecs[1].HostConfig.Binds, [
     '/srv/nextcloud-data/alice/files:/workspace',
     '/srv/launcher-state/alice:/home/coder',
   ])
-  assert.deepEqual(createdSpecs[0].Entrypoint, ['sh', '-lc'])
-  assert.match(createdSpecs[0].Cmd[0], /exec code-server/)
-  assert.match(createdSpecs[0].Env.join('\n'), /CODE_SERVER_DEFAULT_EXTENSIONS=myriad-dreamin\.tinymist,mathematic\.vscode-pdf/)
+  assert.deepEqual(createdSpecs[1].Entrypoint, ['sh', '-lc'])
+  assert.match(createdSpecs[1].Cmd[0], /exec code-server/)
+  assert.match(createdSpecs[1].Env.join('\n'), /CODE_SERVER_DEFAULT_EXTENSIONS=myriad-dreamin\.tinymist,mathematic\.vscode-pdf/)
   assert.match(session.iframePath, /^\/apps\/nvscode\/proxy\/session\//)
 
   const token = session.iframePath.split('/')[5]
@@ -228,11 +237,25 @@ test('ensureCodeServer waits for readiness before returning a new container', as
         throw error
       },
     }),
-    createContainer: async () => ({
-      start: async () => {
-        events.push('start')
-      },
-    }),
+    createContainer: async (spec) => {
+      if (spec.User === '0:0') {
+        return {
+          start: async () => {
+            events.push('prepare-start')
+          },
+          wait: async () => {
+            events.push('prepare-ready')
+            return { StatusCode: 0 }
+          },
+        }
+      }
+
+      return {
+        start: async () => {
+          events.push('start')
+        },
+      }
+    },
   }
 
   const service = new SessionService({
@@ -257,6 +280,6 @@ test('ensureCodeServer waits for readiness before returning a new container', as
 
   const containerName = await service.ensureCodeServer('alice', 'nvscode-code-server:latest')
 
-  assert.equal(containerName, 'nvscode-code-server-alice')
-  assert.deepEqual(events, ['start', 'ready'])
+  assert.match(containerName, /^nvscode-code-server-alice-[a-f0-9]{12}$/)
+  assert.deepEqual(events, ['prepare-start', 'prepare-ready', 'start', 'ready'])
 })

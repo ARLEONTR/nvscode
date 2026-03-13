@@ -1,3 +1,4 @@
+const crypto = require('node:crypto')
 const net = require('node:net')
 const jwt = require('jsonwebtoken')
 const { clamp } = require('./config')
@@ -11,6 +12,8 @@ const CODE_SERVER_ENTRYPOINT = [
   '--disable-update-check',
   '/workspace',
 ]
+
+const CODE_SERVER_STATE_OWNER = '1000:1000'
 
 class SessionService {
   constructor({ docker, config, now = () => Date.now(), waitForCodeServerReady = defaultWaitForCodeServerReady }) {
@@ -209,6 +212,7 @@ class SessionService {
   async ensureCodeServer(userId, image) {
     const containerName = sanitizeContainerName(userId, this.config.codeServerContainerPrefix)
     const container = this.docker.getContainer(containerName)
+    const statePath = userStateHostPath(userId, this.config.launcherStateHostPath)
 
     try {
       const details = await container.inspect()
@@ -226,6 +230,7 @@ class SessionService {
     }
 
     await ensureImage(this.docker, image)
+    await ensureWritableStateDirectory(this.docker, image, statePath)
 
     const created = await this.docker.createContainer({
       name: containerName,
@@ -244,7 +249,7 @@ class SessionService {
         AutoRemove: false,
         Binds: [
           `${userFilesHostPath(userId, this.config.nextcloudDataHostPath)}:/workspace`,
-          `${userStateHostPath(userId, this.config.launcherStateHostPath)}:/home/coder`,
+          `${statePath}:/home/coder`,
         ],
         NetworkMode: this.config.dockerNetworkName,
         RestartPolicy: { Name: 'unless-stopped' },
@@ -255,6 +260,26 @@ class SessionService {
     await this.waitForCodeServerReady(containerName)
 
     return containerName
+  }
+}
+
+async function ensureWritableStateDirectory(docker, image, hostPath) {
+  const initContainer = await docker.createContainer({
+    Image: image,
+    User: '0:0',
+    Entrypoint: ['sh', '-lc'],
+    Cmd: [`mkdir -p /state && chown -R ${CODE_SERVER_STATE_OWNER} /state`],
+    HostConfig: {
+      AutoRemove: true,
+      Binds: [`${hostPath}:/state`],
+    },
+  })
+
+  await initContainer.start()
+  const result = await initContainer.wait()
+
+  if (result.StatusCode !== 0) {
+    throw new Error(`Failed to prepare code-server state directory at ${hostPath}`)
   }
 }
 
@@ -510,7 +535,11 @@ function buildNextcloudScanPath(userId, workspacePath) {
 }
 
 function sanitizeContainerName(userId, prefix) {
-  return `${prefix}-${userId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+  const normalizedPrefix = String(prefix).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'nvscode-code-server'
+  const normalizedUser = String(userId).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'user'
+  const uniqueSuffix = crypto.createHash('sha256').update(String(userId)).digest('hex').slice(0, 12)
+
+  return `${normalizedPrefix}-${normalizedUser}-${uniqueSuffix}`
 }
 
 function userFilesHostPath(userId, rootPath) {
@@ -540,6 +569,7 @@ module.exports = {
   buildCodeServerStartupCommand,
   SessionService,
   ensureImage,
+  ensureWritableStateDirectory,
   isSafeUserId,
   normalizeWorkspacePath,
   parseOptionalInt,
