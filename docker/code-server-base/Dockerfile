@@ -8,8 +8,12 @@ ARG TINYMIST_VERSION=0.14.10
 
 USER root
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl xz-utils bash bash-completion \
+  && rm -rf /var/lib/apt/lists/*
+
 # Ensure www-data has a valid shell, unlocked account, and home directory
-RUN usermod -s /bin/sh www-data \
+RUN usermod -s /bin/bash www-data \
   && passwd -u www-data || true \
   && mkdir -p /var/www \
   && chown www-data:www-data /var/www
