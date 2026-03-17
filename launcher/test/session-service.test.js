@@ -65,6 +65,7 @@ test('isCodeServerContainerCompatible validates the expected state layout', () =
         'HOME=/tmp',
         'XDG_CONFIG_HOME=/nvscode/config',
         'XDG_DATA_HOME=/nvscode/data',
+        'CODE_SERVER_FORCE_EXTENSION_UPDATES=false',
       ],
     },
     HostConfig: {
@@ -79,6 +80,7 @@ test('isCodeServerContainerCompatible validates the expected state layout', () =
     workspacePath: '/srv/nextcloud-data/alice/files',
     configPath: '/srv/launcher-state/alice/config',
     dataPath: '/srv/launcher-state/alice/data',
+    forceExtensionUpdates: false,
   }), true)
 })
 
