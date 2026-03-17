@@ -247,6 +247,7 @@ class SessionService {
         workspacePath,
         configPath,
         dataPath,
+        forceExtensionUpdates: this.config.codeServerForceExtensionUpdates,
       })) {
         await ensureWritableStateDirectories(this.docker, image, {
           configPath,
@@ -286,6 +287,7 @@ class SessionService {
         `XDG_CONFIG_HOME=${CODE_SERVER_CONFIG_PATH}`,
         `XDG_DATA_HOME=${CODE_SERVER_DATA_PATH}`,
         `CODE_SERVER_DEFAULT_EXTENSIONS=${this.config.codeServerDefaultExtensions.join(',')}`,
+        `CODE_SERVER_FORCE_EXTENSION_UPDATES=${this.config.codeServerForceExtensionUpdates ? 'true' : 'false'}`,
       ],
       Labels: {
         'com.nvscode.role': 'code-server',
@@ -391,7 +393,7 @@ function normalizeContainerUser(value) {
   return /^\d+:\d+$/.test(normalized) ? normalized : ''
 }
 
-function isCodeServerContainerCompatible(details, { runtimeOwner, workspacePath, configPath, dataPath }) {
+function isCodeServerContainerCompatible(details, { runtimeOwner, workspacePath, configPath, dataPath, forceExtensionUpdates }) {
   if (normalizeContainerUser(details && details.Config && details.Config.User) !== runtimeOwner) {
     return false
   }
@@ -407,6 +409,7 @@ function isCodeServerContainerCompatible(details, { runtimeOwner, workspacePath,
   return env.has(`HOME=${CODE_SERVER_HOME_PATH}`)
     && env.has(`XDG_CONFIG_HOME=${CODE_SERVER_CONFIG_PATH}`)
     && env.has(`XDG_DATA_HOME=${CODE_SERVER_DATA_PATH}`)
+    && env.has(`CODE_SERVER_FORCE_EXTENSION_UPDATES=${forceExtensionUpdates ? 'true' : 'false'}`)
     && binds.has(`${workspacePath}:/workspace`)
     && binds.has(`${configPath}:${CODE_SERVER_CONFIG_PATH}`)
     && binds.has(`${dataPath}:${CODE_SERVER_DATA_PATH}`)
@@ -431,6 +434,10 @@ function buildCodeServerStartupCommand() {
     "  IFS=','",
     '  for extension in $CODE_SERVER_DEFAULT_EXTENSIONS; do',
     '    if [ -z "$extension" ]; then',
+    '      continue',
+    '    fi',
+    '    if [ "${CODE_SERVER_FORCE_EXTENSION_UPDATES:-false}" = "true" ]; then',
+    '      code-server --install-extension "$extension" --force',
     '      continue',
     '    fi',
     '    if ! printf "%s\\n" "$installed_extensions" | grep -Fxs "$extension" >/dev/null 2>&1; then',

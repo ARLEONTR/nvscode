@@ -110,6 +110,7 @@ services:
       CODE_SERVER_RUN_AS: 33:33
       CODE_SERVER_CONTAINER_PREFIX: nvscode-code-server
       CODE_SERVER_DEFAULT_EXTENSIONS: myriad-dreamin.tinymist,mathematic.vscode-pdf
+      CODE_SERVER_FORCE_EXTENSION_UPDATES: false
       DEFAULT_SESSION_TTL_SECONDS: 3600
       DEFAULT_IDLE_TIMEOUT_SECONDS: 3600
       CLEANUP_INTERVAL_SECONDS: 300
@@ -129,6 +130,7 @@ Notes:
 - `CODE_SERVER_IMAGE` should be the image you built in step 1.
 - the launcher probes `${NEXTCLOUD_DATA_HOST_PATH}/${userId}/files` and starts each code-server container with that directory's UID/GID
 - `CODE_SERVER_RUN_AS` is the fallback if that ownership probe is unavailable or returns unusable output. A common Dockerized Nextcloud value is `33:33` for `www-data`.
+- `CODE_SERVER_FORCE_EXTENSION_UPDATES=true` makes the launcher reinstall each extension listed in `CODE_SERVER_DEFAULT_EXTENSIONS` whenever a user container starts, which is the simplest way to track the latest marketplace release.
 
 If your existing Nextcloud runs in Docker, the easiest option is to attach the launcher to the same Docker network and point the app at the launcher's internal DNS name.
 

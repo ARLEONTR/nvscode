@@ -8,7 +8,7 @@ This repository contains an MVP for embedding nVSCode inside Nextcloud while kee
 - The Nextcloud app also exposes an admin settings page so launcher URL, shared secret, session TTL, idle timeout, and the preferred code-server image can be managed inside Nextcloud.
 - A launcher service manages one code-server container per Nextcloud user. Each container mounts only that user's real Nextcloud files directory.
 - The launcher also persists each user's editor state under a separate host path and stops idle containers on a cleanup interval.
-- The stack builds a custom code-server base image with `typst` and Pandoc 3.9 preinstalled.
+- The stack builds a custom code-server base image with `pandoc`, `typst`, and `tinymist` preinstalled.
 - The launcher installs a configurable default extension set into each user workspace, currently including Tinymist for Typst support.
 - Caddy exposes both services on the same origin. Requests under `/apps/nvscode/proxy/...` are routed to the launcher so the IDE appears to live inside Nextcloud.
 
@@ -43,7 +43,8 @@ If you want to integrate nVSCode into an already-running Nextcloud instead of us
 Once enabled, open Files in Nextcloud, use the file action menu, and select Open in nVSCode.
 
 The launcher reads `CODE_SERVER_DEFAULT_EXTENSIONS` from the environment. By default it includes `myriad-dreamin.tinymist` and `mathematic.vscode-pdf`.
-The default `CODE_SERVER_IMAGE` is a locally built image named `nvscode-code-server:latest` that includes `typst` and Pandoc 3.9, so `pandoc -f typst -t docx` and other Typst conversions are available inside the editor runtime.
+Set `CODE_SERVER_FORCE_EXTENSION_UPDATES=true` if you want the launcher to reinstall those default extensions on container start so they pick up the latest published marketplace version.
+The default `CODE_SERVER_IMAGE` is a locally built image named `nvscode-code-server:latest` that includes `pandoc` 3.9, `typst` 0.14.2, and `tinymist` 0.14.10, so `pandoc -f typst -t docx` and other Typst conversions are available inside the editor runtime.
 PDF files are associated with the PDF viewer custom editor by default, so opening a `.pdf` in nVSCode opens an in-editor preview instead of raw binary content.
 The default signed nVSCode session TTL is 1 hour for new installs. Treat the iframe URL as a bearer token and avoid extending that TTL unless you need to.
 

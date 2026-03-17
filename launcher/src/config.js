@@ -3,6 +3,24 @@ function parseIntValue(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function parseBooleanValue(value, fallback = false) {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  const normalized = value.trim().toLowerCase()
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false
+  }
+
+  return fallback
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
 }
@@ -45,6 +63,7 @@ function createConfig(env = process.env) {
     codeServerRunAs: parseUidGid(env.CODE_SERVER_RUN_AS, '33:33'),
     codeServerContainerPrefix: env.CODE_SERVER_CONTAINER_PREFIX || 'nvscode-code-server',
     codeServerDefaultExtensions: parseCsvList(env.CODE_SERVER_DEFAULT_EXTENSIONS, ['myriad-dreamin.tinymist', 'mathematic.vscode-pdf']),
+    codeServerForceExtensionUpdates: parseBooleanValue(env.CODE_SERVER_FORCE_EXTENSION_UPDATES, false),
     defaultSessionTtlSeconds: clamp(parseIntValue(env.DEFAULT_SESSION_TTL_SECONDS, 3600), 300, 86400),
     defaultIdleTimeoutSeconds: clamp(parseIntValue(env.DEFAULT_IDLE_TIMEOUT_SECONDS, 3600), 300, 86400),
     cleanupIntervalSeconds: clamp(parseIntValue(env.CLEANUP_INTERVAL_SECONDS, 300), 30, 86400),
@@ -73,6 +92,7 @@ function validateConfig(config) {
 module.exports = {
   clamp,
   createConfig,
+  parseBooleanValue,
   parseCsvList,
   parseIntValue,
   parseUidGid,

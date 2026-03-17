@@ -46,6 +46,7 @@ test('buildCodeServerStartupCommand installs default extensions before startup',
   const command = buildCodeServerStartupCommand()
 
   assert.match(command, /CODE_SERVER_DEFAULT_EXTENSIONS/)
+  assert.match(command, /CODE_SERVER_FORCE_EXTENSION_UPDATES/)
   assert.match(command, /code-server --install-extension/)
   assert.match(command, /nvscode-code-server-settings/)
   assert.match(command, /XDG_DATA_HOME\/code-server\/User\/settings\.json/)
