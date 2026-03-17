@@ -9,6 +9,9 @@ ARG TINYMIST_VERSION=0.14.10
 USER root
 
 RUN usermod -s /bin/sh coder
+RUN passwd -u coder || true \
+    && mkdir -p /home/coder \
+    && chown coder:coder /home/coder
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
