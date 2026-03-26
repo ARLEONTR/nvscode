@@ -23,7 +23,7 @@ The Community App Store package contains the Nextcloud integration layer only. A
 
 This release targets self-hosted deployments that keep Nextcloud user files on the local filesystem and can provide Docker access to the launcher service.
 ]]></description>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <licence>AGPL-3.0-or-later</licence>
   <author homepage="https://github.com/ARLEONTR">ARLEONTR</author>
   <namespace>NVSCode</namespace>

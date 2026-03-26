@@ -6,8 +6,13 @@ The format follows Keep a Changelog.
 
 ## [Unreleased]
 
+## 0.1.1
+
+### Changed
+- Updated README with improved structure, badges, and clearer setup instructions.
+
 ### Added
-- App Store packaging script and release documentation in the repository root.
+- First release submitted to the Nextcloud App Store.
 
 ## 0.1.0
 
